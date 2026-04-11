@@ -82,6 +82,7 @@ def parse_log(path):
         'missing trailers:':         'missing',
         'successfully downloaded trailers:': 'downloaded',
         'failed trailer downloads:': 'errors',
+        'refreshing metadata':       None,   # closes the section, items discarded
     }
 
     # Per-item reason tracking
@@ -170,12 +171,13 @@ def parse_log(path):
             continue
 
         # Section header?
-        new_section = None
+        _sentinel = object()
+        new_section = _sentinel
         for pattern, sec in section_headers.items():
-            if pattern in s:
+            if pattern in s.lower():
                 new_section = sec
                 break
-        if new_section:
+        if new_section is not _sentinel:
             section = new_section
             continue
 

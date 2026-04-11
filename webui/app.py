@@ -170,17 +170,21 @@ def api_runs():
 
 @app.route('/api/runs/latest')
 def api_runs_latest():
+    """Return the latest log for each type (Movies + TV Shows) separately."""
     files = get_log_files()
-    if not files:
-        return jsonify(None)
-    f = files[0]
-    return jsonify({
-        'filename': f['name'],
-        'type':     f['type'],
-        'date':     datetime.fromtimestamp(f['mtime']).strftime('%Y-%m-%d %H:%M'),
-        'mtime':    f['mtime'],
-        'stats':    parse_log(f['path']),
-    })
+    result = {}
+    for f in files:
+        if f['type'] not in result:
+            result[f['type']] = {
+                'filename': f['name'],
+                'type':     f['type'],
+                'date':     datetime.fromtimestamp(f['mtime']).strftime('%Y-%m-%d %H:%M'),
+                'mtime':    f['mtime'],
+                'stats':    parse_log(f['path']),
+            }
+        if len(result) == 2:
+            break
+    return jsonify(result if result else None)
 
 
 @app.route('/api/log')

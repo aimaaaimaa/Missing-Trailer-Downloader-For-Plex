@@ -147,18 +147,7 @@ select.log-sel:focus{border-color:#e5a00d}
     </div>
 
     <div class="sec-title">Latest Run</div>
-    <div class="run-meta" id="latestMeta">—</div>
-
-    <div class="cards">
-      <div class="card"><div class="card-label">Checked</div><div class="card-value" id="sChecked">—</div></div>
-      <div class="card"><div class="card-label">Downloaded</div><div class="card-value g" id="sDownloaded">—</div></div>
-      <div class="card"><div class="card-label">Still Missing</div><div class="card-value r" id="sMissing">—</div></div>
-      <div class="card"><div class="card-label">Errors</div><div class="card-value o" id="sErrors">—</div></div>
-      <div class="card"><div class="card-label">Skipped</div><div class="card-value b" id="sSkipped">—</div></div>
-      <div class="card"><div class="card-label">Runtime</div><div class="card-value" id="sRuntime" style="font-size:17px;padding-top:3px">—</div></div>
-    </div>
-
-    <div class="detail-wrap" id="detailWrap"></div>
+    <div id="statsWrap"></div>
 
     <hr class="divider">
 
@@ -273,48 +262,64 @@ async function pollStatus() {
 // ── Latest stats ──────────────────────────────────────────────────────────────
 async function loadLatestStats() {
   try {
-    const d = await (await fetch('/api/runs/latest')).json();
-    if (!d) return;
-    const s = d.stats || {};
+    const data = await (await fetch('/api/runs/latest')).json();
+    if (!data) return;
 
-    setText('sChecked',    s.total || '—');
-    setText('sDownloaded', (s.downloaded || []).length);
-    setText('sMissing',    (s.missing    || []).length);
-    setText('sErrors',     (s.errors     || []).length);
-    setText('sSkipped',    (s.skipped    || []).length);
-    setText('sRuntime',    s.runtime || '—');
-
-    const libs = (s.libraries || []).join(', ');
-    setText('latestMeta',
-      d.date + (libs ? ' — ' + libs : '') + ' [' + d.type + ']'
-      + (s.completed ? '' : ' (in progress)'));
-
-    // Update progress bar if a run is happening
-    if (s.checked && s.total && isRunning) {
-      const pct = Math.round(s.checked / s.total * 100);
-      setText('progText', num(s.checked) + ' / ' + num(s.total) + ' checked');
-      setText('progPct', pct + '%');
-      document.getElementById('progFill').style.width = pct + '%';
-    }
-
-    // Detail accordions
-    const wrap = document.getElementById('detailWrap');
+    const wrap = document.getElementById('statsWrap');
     wrap.innerHTML = '';
-    const sections = [
-      {key:'downloaded', label:'Downloaded',   cls:'pill-g'},
-      {key:'missing',    label:'Still Missing', cls:'pill-r'},
-      {key:'errors',     label:'Errors',        cls:'pill-o'},
-      {key:'skipped',    label:'Skipped',       cls:'pill-b'},
-    ];
-    for (const sec of sections) {
-      const items = s[sec.key] || [];
-      if (!items.length) continue;
-      const det = document.createElement('details');
-      det.className = 'acc';
-      det.innerHTML =
-        `<summary><span class="pill ${sec.cls}">${items.length}</span> ${sec.label}</summary>` +
-        `<div class="acc-grid">${items.map(i => `<div class="acc-item">${esc(i)}</div>`).join('')}</div>`;
-      wrap.appendChild(det);
+
+    // data is { 'Movies': {...}, 'TV Shows': {...} }
+    let progressUpdated = false;
+    for (const [type, d] of Object.entries(data)) {
+      const s = d.stats || {};
+
+      // Update progress bar from whichever type is furthest along
+      if (s.checked && s.total && isRunning && !progressUpdated) {
+        const pct = Math.round(s.checked / s.total * 100);
+        setText('progText', type + ': ' + num(s.checked) + ' / ' + num(s.total) + ' checked');
+        setText('progPct', pct + '%');
+        document.getElementById('progFill').style.width = pct + '%';
+        progressUpdated = true;
+      }
+
+      // Section heading
+      const heading = document.createElement('div');
+      heading.style.cssText = 'margin-bottom:8px;margin-top:16px';
+      heading.innerHTML =
+        `<span class="sec-title">${type}</span>` +
+        `<span class="run-meta" style="margin:0 0 0 10px">${d.date}${s.completed ? '' : ' — in progress'}</span>`;
+      wrap.appendChild(heading);
+
+      // Stat cards
+      const cards = document.createElement('div');
+      cards.className = 'cards';
+      cards.innerHTML = `
+        <div class="card"><div class="card-label">Checked</div><div class="card-value">${s.total || '—'}</div></div>
+        <div class="card"><div class="card-label">Downloaded</div><div class="card-value g">${(s.downloaded||[]).length}</div></div>
+        <div class="card"><div class="card-label">Still Missing</div><div class="card-value r">${(s.missing||[]).length}</div></div>
+        <div class="card"><div class="card-label">Errors</div><div class="card-value o">${(s.errors||[]).length}</div></div>
+        <div class="card"><div class="card-label">Skipped</div><div class="card-value b">${(s.skipped||[]).length}</div></div>
+        <div class="card"><div class="card-label">Runtime</div><div class="card-value" style="font-size:17px;padding-top:3px">${s.runtime||'—'}</div></div>
+      `;
+      wrap.appendChild(cards);
+
+      // Detail accordions
+      const detailSections = [
+        {key:'downloaded', label:'Downloaded',    cls:'pill-g'},
+        {key:'missing',    label:'Still Missing', cls:'pill-r'},
+        {key:'errors',     label:'Errors',        cls:'pill-o'},
+        {key:'skipped',    label:'Skipped',       cls:'pill-b'},
+      ];
+      for (const sec of detailSections) {
+        const items = s[sec.key] || [];
+        if (!items.length) continue;
+        const det = document.createElement('details');
+        det.className = 'acc';
+        det.innerHTML =
+          `<summary><span class="pill ${sec.cls}">${items.length}</span> ${sec.label}</summary>` +
+          `<div class="acc-grid">${items.map(i => `<div class="acc-item">${esc(i)}</div>`).join('')}</div>`;
+        wrap.appendChild(det);
+      }
     }
   } catch (_) {}
 }

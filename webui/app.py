@@ -102,6 +102,12 @@ def parse_log(path):
             if 'title doesn\'t match' in ll or "title doesn't match" in ll:
                 reason = 'Title match failed'
                 break
+            if 'sign in to confirm your age' in ll or 'age-restricted' in ll or 'age restricted' in ll:
+                reason = 'Age restricted — needs cookies'
+                break
+            if ('cookies' in ll and ('authentication' in ll or 'sign in' in ll or 'required' in ll)):
+                reason = 'Age restricted — needs cookies'
+                break
             if 'download failed' in ll or 'failed to download' in ll:
                 reason = 'Download failed'
                 break

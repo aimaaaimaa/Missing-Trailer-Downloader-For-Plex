@@ -190,6 +190,19 @@ def parse_log(path):
         if current_title and not section:
             item_lines.append(s)
 
+    # In verbose mode the year is never printed so reasons are stored under bare
+    # title only.  Promote bare-title reasons to "Title (Year)" keys so the
+    # summary-section lookup (which always uses "Title (Year)") finds them.
+    year_re = re.compile(r'^(.+?)\s*\(\d{4}\)$')
+    all_items = result['errors'] + result['missing'] + result['downloaded'] + result['skipped']
+    for item in all_items:
+        if item not in result['reasons']:
+            m = year_re.match(item)
+            if m:
+                bare = m.group(1).strip()
+                if bare in result['reasons']:
+                    result['reasons'][item] = result['reasons'][bare]
+
     # Fallback reasons from section membership (when log doesn't contain result lines)
     for title in result['errors']:
         if title not in result['reasons']:

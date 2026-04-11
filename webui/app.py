@@ -182,6 +182,14 @@ def parse_log(path):
         if current_title and not section:
             item_lines.append(s)
 
+    # Fallback reasons from section membership (when log doesn't contain result lines)
+    for title in result['errors']:
+        if title not in result['reasons']:
+            result['reasons'][title] = 'Download failed'
+    for title in result['missing']:
+        if title not in result['reasons']:
+            result['reasons'][title] = 'No video found'
+
     return result
 
 

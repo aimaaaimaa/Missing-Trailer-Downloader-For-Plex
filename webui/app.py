@@ -57,7 +57,7 @@ def get_log_files():
 
 
 def parse_log(path):
-    """Parse a log file and return a stats dict."""
+    """Parse a log file and return a stats dict including per-item reasons."""
     try:
         with open(path, 'r', encoding='utf-8', errors='replace') as f:
             raw = f.read()
@@ -70,10 +70,11 @@ def parse_log(path):
         'downloaded': [], 'missing': [], 'errors': [], 'skipped': [],
         'runtime': None, 'total': 0, 'checked': 0,
         'libraries': [], 'completed': False,
+        'reasons': {},  # "Title (Year)" or "Show Title" -> reason string
     }
 
     section = None
-    progress_re = re.compile(r'Checking (?:movie|show) (\d+)/(\d+):')
+    progress_re = re.compile(r'Checking (?:movie|show) (\d+)/(\d+): (.+)')
     library_re  = re.compile(r'Checking your (.+?) library for missing trailers')
 
     section_headers = {
@@ -82,6 +83,39 @@ def parse_log(path):
         'successfully downloaded trailers:': 'downloaded',
         'failed trailer downloads:': 'errors',
     }
+
+    # Per-item reason tracking
+    current_title = None   # title as printed in progress line
+    current_year  = None   # year extracted from "Searching trailer for X (YYYY)..."
+    item_lines    = []     # log lines between two progress markers
+
+    def flush_item():
+        """Determine reason for current_title from its log lines and store it."""
+        if not current_title or not item_lines:
+            return
+        reason = None
+        for ln in item_lines:
+            ll = ln.lower()
+            if 'no suitable videos found' in ll:
+                reason = 'No matching video found'
+                break
+            if 'title doesn\'t match' in ll or "title doesn't match" in ll:
+                reason = 'Title match failed'
+                break
+            if 'download failed' in ll or 'failed to download' in ll:
+                reason = 'Download failed'
+                break
+            if 'timed out' in ll or 'timeout' in ll:
+                reason = 'Plex timeout'
+                break
+            if 'unexpected error' in ll:
+                reason = 'Unexpected error'
+                break
+        if reason:
+            # Store under both "Title (Year)" and bare "Title" so either lookup works
+            if current_year:
+                result['reasons'][f'{current_title} ({current_year})'] = reason
+            result['reasons'][current_title] = reason
 
     for line in lines:
         s = line.strip()
@@ -96,16 +130,27 @@ def parse_log(path):
             section = None
             continue
 
-        m = progress_re.search(s)
+        m = progress_re.match(s)
         if m:
+            flush_item()
             n, total = int(m.group(1)), int(m.group(2))
+            current_title = m.group(3).strip()
+            current_year  = None
+            item_lines    = []
             result['checked'] = n
             if total > result['total']:
                 result['total'] = total
             section = None
             continue
 
+        # Pick up year from "Searching trailer for Title (YYYY)..."
+        if current_title and not section and 'Searching trailer for' in s:
+            yr = re.search(r'\((\d{4})\)', s)
+            if yr:
+                current_year = yr.group(1)
+
         if 'Run Time:' in s:
+            flush_item()
             rt = s.split('Run Time:')[-1].strip()
             if rt:
                 result['runtime'] = rt
@@ -131,6 +176,11 @@ def parse_log(path):
         # Section item
         if section and s:
             result[section].append(s)
+            continue
+
+        # Accumulate per-item lines while scanning (before summary sections)
+        if current_title and not section:
+            item_lines.append(s)
 
     return result
 

@@ -549,18 +549,20 @@ async function submitYtDownload(btn) {
       btn.disabled = false;
     } else {
       toast('Trailer downloaded for ' + title, 'ok');
-      // Optimistically remove the item from the list
-      const grid    = item.closest('.acc-grid');
-      const details = item.closest('details');
-      const pill    = details ? details.querySelector('summary .pill') : null;
-      item.style.transition = 'opacity .3s';
-      item.style.opacity = '0';
-      setTimeout(() => {
-        item.remove();
-        const remaining = grid ? grid.querySelectorAll('.acc-item').length : 0;
-        if (pill) pill.textContent = remaining;
-        if (remaining === 0 && details) details.remove();
-      }, 350);
+      // Re-query by title in case the DOM was re-rendered during the download
+      document.querySelectorAll(`.acc-item[data-title="${escAttr(titleFull)}"]`).forEach(el => {
+        const grid    = el.closest('.acc-grid');
+        const details = el.closest('details');
+        const pill    = details ? details.querySelector('summary .pill') : null;
+        el.style.transition = 'opacity .3s';
+        el.style.opacity = '0';
+        setTimeout(() => {
+          el.remove();
+          const remaining = grid ? grid.querySelectorAll('.acc-item').length : 0;
+          if (pill) pill.textContent = remaining;
+          if (remaining === 0 && details) details.remove();
+        }, 350);
+      });
     }
   } catch (_) {
     status.textContent = '✗ Request failed';

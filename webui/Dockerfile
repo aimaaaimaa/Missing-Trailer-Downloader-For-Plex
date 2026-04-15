@@ -4,9 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     IS_DOCKER=true
 
-# ffmpeg required by yt-dlp post-processing when triggering downloads
+# ffmpeg for yt-dlp post-processing; nodejs for YouTube n-challenge solving
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /webui

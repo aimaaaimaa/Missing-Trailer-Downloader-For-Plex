@@ -5,6 +5,7 @@ import time
 import yaml
 import threading
 import subprocess
+import yt_dlp
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 
@@ -420,6 +421,71 @@ def api_config_save():
             f.write(content)
         return jsonify({'status': 'saved'})
     except OSError as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/download/manual', methods=['POST'])
+def api_manual_download():
+    data       = request.json or {}
+    title      = data.get('title', '').strip()
+    year       = str(data.get('year', '')).strip()
+    url        = data.get('url', '').strip()
+    media_type = data.get('media_type', 'Movies')
+
+    if not title or not url:
+        return jsonify({'error': 'title and url are required'}), 400
+    if 'youtube.com' not in url and 'youtu.be' not in url:
+        return jsonify({'error': 'Only YouTube URLs are supported'}), 400
+    if media_type not in ('Movies', 'TV Shows'):
+        return jsonify({'error': 'Invalid media_type'}), 400
+
+    lib_roots = {
+        'Movies':   '/share/Multimedia/Video/Movies',
+        'TV Shows': '/share/CE_CACHEDEV1_DATA/Multimedia/Video/TV Shows',
+    }
+    lib_root = lib_roots[media_type]
+
+    # Find the media folder — exact match first, then fuzzy
+    search_name = f"{title} ({year})" if year else title
+    media_folder = None
+    try:
+        for entry in os.scandir(lib_root):
+            if entry.is_dir() and entry.name.lower() == search_name.lower():
+                media_folder = entry.path
+                break
+        if not media_folder:
+            for entry in os.scandir(lib_root):
+                if entry.is_dir() and title.lower() in entry.name.lower():
+                    media_folder = entry.path
+                    break
+    except OSError as e:
+        return jsonify({'error': f'Cannot scan library: {e}'}), 500
+
+    if not media_folder:
+        return jsonify({'error': f'Folder not found for "{search_name}"'}), 404
+
+    trailers_folder = os.path.join(media_folder, 'Trailers')
+    os.makedirs(trailers_folder, exist_ok=True)
+    sanitized = title.replace(':', ' -')
+    out_name  = f"{sanitized} ({year})-trailer" if year else f"{sanitized}-trailer"
+    out_tmpl  = os.path.join(trailers_folder, out_name + '.%(ext)s')
+
+    cookies_path = get_cookies_path()
+    ydl_opts = {
+        'outtmpl':             out_tmpl,
+        'quiet':               True,
+        'no_warnings':         True,
+        'noplaylist':          True,
+        'merge_output_format': 'mkv',
+    }
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        return jsonify({'status': 'downloaded', 'folder': media_folder})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 

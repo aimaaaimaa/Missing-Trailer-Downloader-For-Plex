@@ -107,6 +107,16 @@ select.log-sel:focus{border-color:#e5a00d}
 .toast.err{border-left:3px solid #e74c3c}
 @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 
+/* ── Manual download ── */
+.acc-item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+.yt-btn{background:transparent;border:1px solid #2a2a3a;color:#444;border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;flex-shrink:0;transition:all .15s;line-height:1.4}
+.yt-btn:hover{border-color:#e74c3c;color:#e74c3c}
+.yt-form{display:none;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+.yt-form.open{display:flex}
+.yt-input{background:#08080e;border:1px solid #333;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;flex:1;min-width:180px;outline:none}
+.yt-input:focus{border-color:#e5a00d}
+.yt-status{font-size:10px;color:#555}
+
 /* ── Misc ── */
 .divider{border:none;border-top:1px solid #252535;margin:20px 0}
 .empty{color:#444;text-align:center;padding:28px;font-size:13px}
@@ -315,13 +325,25 @@ async function loadLatestStats() {
         const items   = s[sec.key] || [];
         const reasons = s.reasons  || {};
         if (!items.length) continue;
+        const canManualDl = sec.key === 'missing' || sec.key === 'errors';
         const det = document.createElement('details');
         det.className = 'acc';
         det.innerHTML =
           `<summary><span class="pill ${sec.cls}">${items.length}</span> ${sec.label}</summary>` +
           `<div class="acc-grid">${items.map(i => {
             const r = reasons[i];
-            return `<div class="acc-item">${esc(i)}${r ? `<span class="acc-reason">${esc(r)}</span>` : ''}</div>`;
+            const ytBtn = canManualDl
+              ? `<button class="yt-btn" title="Supply a YouTube URL to download this trailer" onclick="toggleYtForm(this)">▼ YT</button>`
+              : '';
+            return `<div class="acc-item" data-title="${escAttr(i)}" data-mtype="${escAttr(type)}">` +
+              `<div class="acc-item-row">${esc(i)}${ytBtn}</div>` +
+              `${r ? `<span class="acc-reason">${esc(r)}</span>` : ''}` +
+              (canManualDl ? `<div class="yt-form">` +
+                `<input class="yt-input" placeholder="https://youtube.com/watch?v=…" type="url">` +
+                `<button class="btn btn-primary btn-sm" onclick="submitYtDownload(this)">Download</button>` +
+                `<span class="yt-status"></span>` +
+              `</div>` : '') +
+            `</div>`;
           }).join('')}</div>`;
         wrap.appendChild(det);
       }
@@ -490,12 +512,65 @@ async function saveConfig() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Manual YouTube download ───────────────────────────────────────────────────
+function toggleYtForm(btn) {
+  const form = btn.closest('.acc-item').querySelector('.yt-form');
+  form.classList.toggle('open');
+  if (form.classList.contains('open')) form.querySelector('.yt-input').focus();
+}
+
+async function submitYtDownload(btn) {
+  const item      = btn.closest('.acc-item');
+  const titleFull = item.dataset.title;
+  const mediaType = item.dataset.mtype;
+  const url       = item.querySelector('.yt-input').value.trim();
+  const status    = item.querySelector('.yt-status');
+
+  const match = titleFull.match(/^(.+?)\s*\((\d{4})\)$/);
+  const title = match ? match[1].trim() : titleFull;
+  const year  = match ? match[2] : '';
+
+  if (!url) { toast('Paste a YouTube URL first', 'err'); return; }
+
+  btn.disabled = true;
+  status.textContent = 'Downloading…';
+  status.style.color = '#f39c12';
+
+  try {
+    const res = await fetch('/api/download/manual', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ title, year, url, media_type: mediaType }),
+    });
+    const d = await res.json();
+    if (d.error) {
+      status.textContent = '✗ ' + d.error;
+      status.style.color = '#e74c3c';
+      btn.disabled = false;
+    } else {
+      status.textContent = '✓ Downloaded';
+      status.style.color = '#2ecc71';
+      toast('Trailer downloaded for ' + title, 'ok');
+      // Refresh stats after a moment so the item moves to Downloaded
+      setTimeout(loadLatestStats, 2000);
+    }
+  } catch (_) {
+    status.textContent = '✗ Request failed';
+    status.style.color = '#e74c3c';
+    btn.disabled = false;
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
 }
 function esc(t) {
   return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(t) {
+  return String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function num(n) { return Number(n).toLocaleString(); }
 function toast(msg, type) {

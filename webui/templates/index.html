@@ -216,6 +216,7 @@ select.log-sel:focus{border-color:#e5a00d}
 let selectedType = '3';
 let evtSrc = null;
 let isRunning = false;
+const manuallyDownloaded = new Set(); // titles downloaded this session
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-tab').forEach(t => {
@@ -322,7 +323,7 @@ async function loadLatestStats() {
         {key:'skipped',    label:'Skipped',       cls:'pill-b'},
       ];
       for (const sec of detailSections) {
-        const items   = s[sec.key] || [];
+        const items   = (s[sec.key] || []).filter(i => !manuallyDownloaded.has(i));
         const reasons = s.reasons  || {};
         if (!items.length) continue;
         const canManualDl = sec.key === 'missing' || sec.key === 'errors';
@@ -549,6 +550,7 @@ async function submitYtDownload(btn) {
       btn.disabled = false;
     } else {
       toast('Trailer downloaded for ' + title, 'ok');
+      manuallyDownloaded.add(titleFull);
       // Re-query by title in case the DOM was re-rendered during the download
       document.querySelectorAll(`.acc-item[data-title="${escAttr(titleFull)}"]`).forEach(el => {
         const grid    = el.closest('.acc-grid');

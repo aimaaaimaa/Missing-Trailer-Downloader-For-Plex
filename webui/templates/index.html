@@ -216,7 +216,7 @@ select.log-sel:focus{border-color:#e5a00d}
 let selectedType = '3';
 let evtSrc = null;
 let isRunning = false;
-const manuallyDownloaded = new Set(); // titles downloaded this session
+const manuallyDownloaded = new Set(JSON.parse(localStorage.getItem('mtdp_downloaded') || '[]'));
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-tab').forEach(t => {
@@ -323,6 +323,16 @@ async function loadLatestStats() {
         {key:'skipped',    label:'Skipped',       cls:'pill-b'},
       ];
       for (const sec of detailSections) {
+        // Prune localStorage entries that no longer appear in any log section
+        if (sec.key === 'missing' || sec.key === 'errors') {
+          const inLog = new Set(s[sec.key] || []);
+          manuallyDownloaded.forEach(t => {
+            if (!inLog.has(t)) {
+              manuallyDownloaded.delete(t);
+              localStorage.setItem('mtdp_downloaded', JSON.stringify([...manuallyDownloaded]));
+            }
+          });
+        }
         const items   = (s[sec.key] || []).filter(i => !manuallyDownloaded.has(i));
         const reasons = s.reasons  || {};
         if (!items.length) continue;
@@ -551,6 +561,7 @@ async function submitYtDownload(btn) {
     } else {
       toast('Trailer downloaded for ' + title, 'ok');
       manuallyDownloaded.add(titleFull);
+      localStorage.setItem('mtdp_downloaded', JSON.stringify([...manuallyDownloaded]));
       // Re-query by title in case the DOM was re-rendered during the download
       document.querySelectorAll(`.acc-item[data-title="${escAttr(titleFull)}"]`).forEach(el => {
         const grid    = el.closest('.acc-grid');

@@ -548,11 +548,19 @@ async function submitYtDownload(btn) {
       status.style.color = '#e74c3c';
       btn.disabled = false;
     } else {
-      status.textContent = '✓ Downloaded';
-      status.style.color = '#2ecc71';
       toast('Trailer downloaded for ' + title, 'ok');
-      // Refresh stats after a moment so the item moves to Downloaded
-      setTimeout(loadLatestStats, 2000);
+      // Optimistically remove item and update pill count
+      const grid    = item.closest('.acc-grid');
+      const summary = item.closest('details').querySelector('summary');
+      const pill    = summary.querySelector('.pill');
+      item.style.transition = 'opacity .3s';
+      item.style.opacity = '0';
+      setTimeout(() => {
+        item.remove();
+        const remaining = grid.querySelectorAll('.acc-item').length;
+        if (pill) pill.textContent = remaining;
+        if (remaining === 0) item.closest('details').remove();
+      }, 300);
     }
   } catch (_) {
     status.textContent = '✗ Request failed';

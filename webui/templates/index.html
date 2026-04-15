@@ -323,16 +323,6 @@ async function loadLatestStats() {
         {key:'skipped',    label:'Skipped',       cls:'pill-b'},
       ];
       for (const sec of detailSections) {
-        // Prune localStorage entries that no longer appear in any log section
-        if (sec.key === 'missing' || sec.key === 'errors') {
-          const inLog = new Set(s[sec.key] || []);
-          manuallyDownloaded.forEach(t => {
-            if (!inLog.has(t)) {
-              manuallyDownloaded.delete(t);
-              localStorage.setItem('mtdp_downloaded', JSON.stringify([...manuallyDownloaded]));
-            }
-          });
-        }
         const items   = (s[sec.key] || []).filter(i => !manuallyDownloaded.has(i));
         const reasons = s.reasons  || {};
         if (!items.length) continue;

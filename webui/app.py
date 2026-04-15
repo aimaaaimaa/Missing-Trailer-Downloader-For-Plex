@@ -450,16 +450,32 @@ def api_manual_download():
     lib_root = lib_roots[media_type]
 
     # Find the media folder — exact match first, then fuzzy
-    search_name = f"{title} ({year})" if year else title
+    # Normalise colons to dashes for filesystem comparison (Plex: "A: B" → disk: "A - B")
+    def norm(s):
+        return re.sub(r'\s*:\s*', ' - ', s).lower()
+
+    search_name  = f"{title} ({year})" if year else title
+    norm_title   = norm(title)
+    norm_search  = norm(search_name)
     media_folder = None
     try:
-        for entry in os.scandir(lib_root):
-            if entry.is_dir() and entry.name.lower() == search_name.lower():
+        entries = [e for e in os.scandir(lib_root) if e.is_dir()]
+        # 1. Exact match (normalised)
+        for entry in entries:
+            if norm(entry.name) == norm_search:
                 media_folder = entry.path
                 break
+        # 2. Title + year present anywhere (normalised, handles year mismatch)
         if not media_folder:
-            for entry in os.scandir(lib_root):
-                if entry.is_dir() and title.lower() in entry.name.lower():
+            for entry in entries:
+                n = norm(entry.name)
+                if norm_title in n and (not year or year in entry.name):
+                    media_folder = entry.path
+                    break
+        # 3. Title only (normalised), ignore year
+        if not media_folder:
+            for entry in entries:
+                if norm_title in norm(entry.name):
                     media_folder = entry.path
                     break
     except OSError as e:

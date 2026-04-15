@@ -549,18 +549,18 @@ async function submitYtDownload(btn) {
       btn.disabled = false;
     } else {
       toast('Trailer downloaded for ' + title, 'ok');
-      // Optimistically remove item and update pill count
+      // Optimistically remove the item from the list
       const grid    = item.closest('.acc-grid');
-      const summary = item.closest('details').querySelector('summary');
-      const pill    = summary.querySelector('.pill');
+      const details = item.closest('details');
+      const pill    = details ? details.querySelector('summary .pill') : null;
       item.style.transition = 'opacity .3s';
       item.style.opacity = '0';
       setTimeout(() => {
         item.remove();
-        const remaining = grid.querySelectorAll('.acc-item').length;
+        const remaining = grid ? grid.querySelectorAll('.acc-item').length : 0;
         if (pill) pill.textContent = remaining;
-        if (remaining === 0) item.closest('details').remove();
-      }, 300);
+        if (remaining === 0 && details) details.remove();
+      }, 350);
     }
   } catch (_) {
     status.textContent = '✗ Request failed';

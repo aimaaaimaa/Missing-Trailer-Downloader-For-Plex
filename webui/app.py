@@ -23,6 +23,10 @@ ANSI_RE = re.compile(r'\033\[[0-9;]*[mKJ]')
 def strip_ansi(text):
     return ANSI_RE.sub('', text)
 
+def get_cookies_path():
+    path = '/cookies/cookies.txt'
+    return path if os.path.isfile(path) else None
+
 # ── Run state ──────────────────────────────────────────────────────────────────
 
 _lock = threading.Lock()

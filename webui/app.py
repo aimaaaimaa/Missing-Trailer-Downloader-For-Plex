@@ -492,12 +492,12 @@ def api_manual_download():
 
     cookies_path = get_cookies_path()
     ydl_opts = {
-        'outtmpl':             out_tmpl,
-        'quiet':               True,
-        'no_warnings':         True,
-        'noplaylist':          True,
-        'merge_output_format': 'mkv',
-        'extractor_args':      {'youtube': {'player_client': ['web']}},
+        'outtmpl':        out_tmpl,
+        'quiet':          True,
+        'no_warnings':    True,
+        'noplaylist':     True,
+        'format':         'bestvideo+bestaudio/best',
+        'extractor_args': {'youtube': {'player_client': ['web']}},
     }
     if cookies_path:
         ydl_opts['cookiefile'] = cookies_path

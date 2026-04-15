@@ -497,6 +497,7 @@ def api_manual_download():
         'no_warnings':         True,
         'noplaylist':          True,
         'merge_output_format': 'mkv',
+        'extractor_args':      {'youtube': {'player_client': ['web']}},
     }
     if cookies_path:
         ydl_opts['cookiefile'] = cookies_path

@@ -497,7 +497,7 @@ def api_manual_download():
         'no_warnings':    True,
         'noplaylist':     True,
         'format':         'bestvideo+bestaudio/best',
-        'extractor_args': {'youtube': {'player_client': ['web']}},
+        'extractor_args': {'youtube': {'player_client': ['android']}},
     }
     if cookies_path:
         ydl_opts['cookiefile'] = cookies_path

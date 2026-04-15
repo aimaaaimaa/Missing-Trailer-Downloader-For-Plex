@@ -191,10 +191,10 @@ select.log-sel:focus{border-color:#e5a00d}
           <tr>
             <th>Date</th><th>Type</th><th>Libraries</th>
             <th>Checked</th><th>Downloaded</th><th>Missing</th>
-            <th>Errors</th><th>Skipped</th><th>Runtime</th><th>Status</th>
+            <th>Skipped</th><th>Runtime</th><th>Status</th>
           </tr>
         </thead>
-        <tbody id="histBody"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+        <tbody id="histBody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -309,7 +309,6 @@ async function loadLatestStats() {
         <div class="card"><div class="card-label">Checked</div><div class="card-value">${s.total || '—'}</div></div>
         <div class="card"><div class="card-label">Downloaded</div><div class="card-value g">${(s.downloaded||[]).length}</div></div>
         <div class="card"><div class="card-label">Still Missing</div><div class="card-value r">${(s.missing||[]).length}</div></div>
-        <div class="card"><div class="card-label">Errors</div><div class="card-value o">${(s.errors||[]).length}</div></div>
         <div class="card"><div class="card-label">Skipped</div><div class="card-value b">${(s.skipped||[]).length}</div></div>
         <div class="card"><div class="card-label">Runtime</div><div class="card-value" style="font-size:17px;padding-top:3px">${s.runtime||'—'}</div></div>
       `;
@@ -319,7 +318,6 @@ async function loadLatestStats() {
       const detailSections = [
         {key:'downloaded', label:'Downloaded',    cls:'pill-g'},
         {key:'missing',    label:'Still Missing', cls:'pill-r'},
-        {key:'errors',     label:'Errors',        cls:'pill-o'},
         {key:'skipped',    label:'Skipped',       cls:'pill-b'},
       ];
       for (const sec of detailSections) {
@@ -443,7 +441,6 @@ async function loadHistory() {
         <td>${s.total||'—'}</td>
         <td>${dl ? `<span class="pill pill-g">${dl}</span>` : '0'}</td>
         <td>${mis ? `<span class="pill pill-r">${mis}</span>` : '0'}</td>
-        <td>${err ? `<span class="pill pill-o">${err}</span>` : '0'}</td>
         <td style="color:#555">${skp}</td>
         <td style="color:#555">${s.runtime||'—'}</td>
         <td>${ok}</td>

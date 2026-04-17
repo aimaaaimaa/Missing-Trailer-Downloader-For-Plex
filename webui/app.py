@@ -489,18 +489,6 @@ def find_media_folder(title, year, media_type):
     return None
 
 
-@app.route('/api/folder')
-def api_folder():
-    title      = request.args.get('title', '').strip()
-    year       = request.args.get('year', '').strip()
-    media_type = request.args.get('media_type', 'Movies')
-    if not title or media_type not in LIB_ROOTS:
-        return jsonify({'error': 'Invalid params'}), 400
-    folder = find_media_folder(title, year, media_type)
-    if not folder:
-        return jsonify({'error': 'Not found'}), 404
-    return jsonify({'folder': folder})
-
 
 @app.route('/api/download/manual', methods=['POST'])
 def api_manual_download():

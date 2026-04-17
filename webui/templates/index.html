@@ -376,7 +376,7 @@ async function loadLatestStats() {
               ? `<button class="yt-btn" title="Supply a YouTube URL to download this trailer" onclick="toggleYtForm(this)">▼ YT</button>`
               : '';
             const searchBtn = canManualDl
-              ? `<button class="yt-btn yt-search-btn" title="Search YouTube for this trailer" onclick="searchYt(${JSON.stringify(i)})">S</button>`
+              ? `<button class="yt-btn yt-search-btn" title="Search YouTube for this trailer" onclick="searchYt(${escAttr(JSON.stringify(i))})">S</button>`
               : '';
             return `<div class="acc-item" data-title="${escAttr(i)}" data-mtype="${escAttr(type)}">` +
               `<div class="acc-item-row">${esc(i)}<span style="display:flex;gap:4px;flex-shrink:0">${searchBtn}${ytBtn}</span></div>` +

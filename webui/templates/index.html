@@ -222,6 +222,9 @@ let isRunning = false;
 let manuallyDownloaded = JSON.parse(localStorage.getItem('mtdp_downloaded') || '[]');
 manuallyDownloaded = manuallyDownloaded.filter(x => x && typeof x === 'object' && x.title && x.type);
 
+// Tracks which accordions are open across re-renders. Key: "{type}:{label}"
+const openSections = new Set();
+
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-tab').forEach(t => {
   t.addEventListener('click', () => {
@@ -285,6 +288,12 @@ async function loadLatestStats() {
   try {
     const data = await (await fetch('/api/runs/latest')).json();
     if (!data) return;
+
+    // Snapshot which accordions are currently open before re-rendering
+    document.querySelectorAll('details.acc[data-acc-key]').forEach(det => {
+      if (det.open) openSections.add(det.dataset.accKey);
+      else openSections.delete(det.dataset.accKey);
+    });
 
     const wrap = document.getElementById('statsWrap');
     wrap.innerHTML = '';
@@ -350,6 +359,13 @@ async function loadLatestStats() {
         const canManualDl = sec.key === 'missing' || sec.key === 'errors';
         const det = document.createElement('details');
         det.className = 'acc';
+        const accKey = `${type}:${sec.label}`;
+        det.dataset.accKey = accKey;
+        if (openSections.has(accKey)) det.open = true;
+        det.addEventListener('toggle', () => {
+          if (det.open) openSections.add(accKey);
+          else openSections.delete(accKey);
+        });
         det.innerHTML =
           `<summary><span class="pill ${sec.cls}">${items.length}</span> ${sec.label}</summary>` +
           `<div class="acc-grid">${items.map(i => {
@@ -575,7 +591,8 @@ async function submitYtDownload(btn) {
         manuallyDownloaded.push({title: titleFull, type: mediaType});
         localStorage.setItem('mtdp_downloaded', JSON.stringify(manuallyDownloaded));
       }
-      // Re-render stats — cards and accordions now reflect the manual download
+      // Keep the Still Missing section open after re-render
+      openSections.add(`${mediaType}:Still Missing`);
       loadLatestStats();
     }
   } catch (_) {

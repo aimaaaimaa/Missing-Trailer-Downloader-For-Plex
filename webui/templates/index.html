@@ -382,6 +382,7 @@ async function loadLatestStats() {
               `<div class="acc-item-row">${esc(i)}<span style="display:flex;gap:4px;flex-shrink:0">${searchBtn}${ytBtn}</span></div>` +
               `${r ? `<span class="acc-reason">${esc(r)}</span>` : ''}` +
               (canManualDl ? `<div class="yt-form">` +
+                `<span class="yt-path" style="width:100%;font-size:10px;color:#555;margin-bottom:2px"></span>` +
                 `<input class="yt-input" placeholder="https://youtube.com/… or other video URL" type="url">` +
                 `<button class="btn btn-primary btn-sm" onclick="submitYtDownload(this)">Download</button>` +
                 `<span class="yt-status"></span>` +
@@ -561,9 +562,24 @@ function searchYt(titleFull) {
 }
 
 function toggleYtForm(btn) {
-  const form = btn.closest('.acc-item').querySelector('.yt-form');
+  const item = btn.closest('.acc-item');
+  const form = item.querySelector('.yt-form');
   form.classList.toggle('open');
-  if (form.classList.contains('open')) form.querySelector('.yt-input').focus();
+  if (form.classList.contains('open')) {
+    form.querySelector('.yt-input').focus();
+    const pathEl = form.querySelector('.yt-path');
+    if (pathEl && !pathEl.textContent) {
+      const titleFull = item.dataset.title;
+      const mtype     = item.dataset.mtype;
+      const match     = titleFull.match(/^(.+?)\s*\((\d{4})\)$/);
+      const title     = match ? match[1].trim() : titleFull;
+      const year      = match ? match[2] : '';
+      fetch(`/api/folder?title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}&media_type=${encodeURIComponent(mtype)}`)
+        .then(r => r.json())
+        .then(d => { pathEl.textContent = d.folder || d.error || ''; })
+        .catch(() => {});
+    }
+  }
 }
 
 async function submitYtDownload(btn) {

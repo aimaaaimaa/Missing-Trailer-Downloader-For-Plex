@@ -456,6 +456,52 @@ def api_config_save():
         return jsonify({'error': str(e)}), 500
 
 
+LIB_ROOTS = {
+    'Movies':   '/share/Multimedia/Video/Movies',
+    'TV Shows': '/share/CE_CACHEDEV1_DATA/Multimedia/Video/TV Shows',
+}
+
+def _norm(s):
+    s = re.sub(r'\s*[:\-]\s*', ' ', s)
+    s = re.sub(r"['\u2019]", '', s)
+    s = re.sub(r'\s+', ' ', s)
+    return s.lower().strip()
+
+def find_media_folder(title, year, media_type):
+    """Return the resolved folder path or None."""
+    lib_root    = LIB_ROOTS[media_type]
+    search_name = f"{title} ({year})" if year else title
+    norm_title  = _norm(title)
+    norm_search = _norm(search_name)
+    try:
+        entries = [e for e in os.scandir(lib_root) if e.is_dir()]
+    except OSError:
+        return None
+    for entry in entries:
+        if _norm(entry.name) == norm_search:
+            return entry.path
+    for entry in entries:
+        if norm_title in _norm(entry.name) and (not year or year in entry.name):
+            return entry.path
+    for entry in entries:
+        if norm_title in _norm(entry.name):
+            return entry.path
+    return None
+
+
+@app.route('/api/folder')
+def api_folder():
+    title      = request.args.get('title', '').strip()
+    year       = request.args.get('year', '').strip()
+    media_type = request.args.get('media_type', 'Movies')
+    if not title or media_type not in LIB_ROOTS:
+        return jsonify({'error': 'Invalid params'}), 400
+    folder = find_media_folder(title, year, media_type)
+    if not folder:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify({'folder': folder})
+
+
 @app.route('/api/download/manual', methods=['POST'])
 def api_manual_download():
     data       = request.json or {}
@@ -468,52 +514,13 @@ def api_manual_download():
         return jsonify({'error': 'title and url are required'}), 400
     if not url.startswith('http://') and not url.startswith('https://'):
         return jsonify({'error': 'URL must start with http:// or https://'}), 400
-    if media_type not in ('Movies', 'TV Shows'):
+    if media_type not in LIB_ROOTS:
         return jsonify({'error': 'Invalid media_type'}), 400
 
-    lib_roots = {
-        'Movies':   '/share/Multimedia/Video/Movies',
-        'TV Shows': '/share/CE_CACHEDEV1_DATA/Multimedia/Video/TV Shows',
-    }
-    lib_root = lib_roots[media_type]
-
-    # Find the media folder — exact match first, then fuzzy
-    # Normalise colons to dashes for filesystem comparison (Plex: "A: B" → disk: "A - B")
-    def norm(s):
-        s = re.sub(r'\s*[:\-]\s*', ' ', s)  # colon or dash → space
-        s = re.sub(r"['\u2019]", '', s)      # strip apostrophes
-        s = re.sub(r'\s+', ' ', s)           # collapse multiple spaces
-        return s.lower().strip()
-
-    search_name  = f"{title} ({year})" if year else title
-    norm_title   = norm(title)
-    norm_search  = norm(search_name)
-    media_folder = None
-    try:
-        entries = [e for e in os.scandir(lib_root) if e.is_dir()]
-        # 1. Exact match (normalised)
-        for entry in entries:
-            if norm(entry.name) == norm_search:
-                media_folder = entry.path
-                break
-        # 2. Title + year present anywhere (normalised, handles year mismatch)
-        if not media_folder:
-            for entry in entries:
-                n = norm(entry.name)
-                if norm_title in n and (not year or year in entry.name):
-                    media_folder = entry.path
-                    break
-        # 3. Title only (normalised), ignore year
-        if not media_folder:
-            for entry in entries:
-                if norm_title in norm(entry.name):
-                    media_folder = entry.path
-                    break
-    except OSError as e:
-        return jsonify({'error': f'Cannot scan library: {e}'}), 500
+    media_folder = find_media_folder(title, year, media_type)
 
     if not media_folder:
-        return jsonify({'error': f'Folder not found for "{search_name}"'}), 404
+        return jsonify({'error': f'Folder not found for "{title} ({year})"'}), 404
 
     trailers_folder = os.path.join(media_folder, 'Trailers')
     os.makedirs(trailers_folder, exist_ok=True)

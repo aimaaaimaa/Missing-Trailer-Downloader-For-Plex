@@ -5,6 +5,9 @@ import time
 import yaml
 import threading
 import subprocess
+import urllib.request
+import urllib.parse
+import json as _json
 import yt_dlp
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
@@ -467,8 +470,70 @@ def _norm(s):
     s = re.sub(r'\s+', ' ', s)
     return s.lower().strip()
 
+def _get_plex_config():
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            cfg = yaml.safe_load(f)
+        return cfg.get('PLEX_URL', ''), cfg.get('PLEX_TOKEN', '')
+    except Exception:
+        return '', ''
+
+PLEX_SECTION_IDS = {}
+
+def _get_plex_section_id(plex_url, token, media_type):
+    if media_type in PLEX_SECTION_IDS:
+        return PLEX_SECTION_IDS[media_type]
+    try:
+        req = urllib.request.Request(
+            f"{plex_url}/library/sections?X-Plex-Token={token}",
+            headers={'Accept': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = _json.load(r)
+        plex_type = 'movie' if media_type == 'Movies' else 'show'
+        for section in data.get('MediaContainer', {}).get('Directory', []):
+            if section.get('type') == plex_type:
+                PLEX_SECTION_IDS[media_type] = section['key']
+                return section['key']
+    except Exception:
+        pass
+    return None
+
+def _find_folder_via_plex(title, year, media_type):
+    """Ask Plex for the file location — works regardless of folder name."""
+    plex_url, token = _get_plex_config()
+    if not plex_url or not token:
+        return None
+    try:
+        params = urllib.parse.urlencode({'query': title, 'X-Plex-Token': token})
+        req = urllib.request.Request(
+            f"{plex_url}/search?{params}",
+            headers={'Accept': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = _json.load(r)
+        items = data.get('MediaContainer', {}).get('Metadata', [])
+        plex_type = 'movie' if media_type == 'Movies' else 'show'
+        for item in items:
+            if item.get('type') != plex_type:
+                continue
+            if year and str(item.get('year', '')) != str(year):
+                continue
+            for media in item.get('Media', []):
+                for part in media.get('Part', []):
+                    file_path = part.get('file', '')
+                    if file_path:
+                        return os.path.dirname(file_path)
+    except Exception:
+        pass
+    return None
+
 def find_media_folder(title, year, media_type):
-    """Return the resolved folder path or None."""
+    """Return the resolved folder path — tries Plex first, falls back to folder scan."""
+    folder = _find_folder_via_plex(title, year, media_type)
+    if folder:
+        return folder
+    # Fallback: scan library folder by name
     lib_root    = LIB_ROOTS[media_type]
     search_name = f"{title} ({year})" if year else title
     norm_title  = _norm(title)

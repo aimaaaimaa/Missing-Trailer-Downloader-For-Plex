@@ -149,6 +149,7 @@ select.log-sel:focus{border-color:#e5a00d}
       <button class="rt-btn" data-type="2">TV Shows</button>
       <button class="btn btn-primary" id="btnRun">▶ Start</button>
       <button class="btn btn-danger" id="btnStop" disabled>■ Stop</button>
+      <button class="rt-btn" id="btnFullScan" title="Ignore MTDfP labels — check every movie/show regardless of prior scan state">Full Scan</button>
       <span style="margin-left:auto;font-size:11px;color:#444" id="runLabel"></span>
     </div>
 
@@ -214,9 +215,12 @@ select.log-sel:focus{border-color:#e5a00d}
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 let selectedType = '3';
+let fullScan = false;
 let evtSrc = null;
 let isRunning = false;
-const manuallyDownloaded = new Set(JSON.parse(localStorage.getItem('mtdp_downloaded') || '[]'));
+// Stored as [{title, type}, …]. Migrate legacy string-array entries.
+let manuallyDownloaded = JSON.parse(localStorage.getItem('mtdp_downloaded') || '[]');
+manuallyDownloaded = manuallyDownloaded.filter(x => x && typeof x === 'object' && x.title && x.type);
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-tab').forEach(t => {
@@ -232,12 +236,17 @@ document.querySelectorAll('.nav-tab').forEach(t => {
 });
 
 // ── Run type buttons ──────────────────────────────────────────────────────────
-document.querySelectorAll('.rt-btn').forEach(b => {
+document.querySelectorAll('.rt-btn[data-type]').forEach(b => {
   b.addEventListener('click', () => {
-    document.querySelectorAll('.rt-btn').forEach(x => x.classList.remove('sel'));
+    document.querySelectorAll('.rt-btn[data-type]').forEach(x => x.classList.remove('sel'));
     b.classList.add('sel');
     selectedType = b.dataset.type;
   });
+});
+
+document.getElementById('btnFullScan').addEventListener('click', function() {
+  fullScan = !fullScan;
+  this.classList.toggle('sel', fullScan);
 });
 
 // ── Status polling ────────────────────────────────────────────────────────────
@@ -302,13 +311,20 @@ async function loadLatestStats() {
         `<span class="run-meta" style="margin:0 0 0 10px">${d.date}${s.completed ? '' : ' — in progress'}</span>`;
       wrap.appendChild(heading);
 
+      // Manually downloaded entries for this media type
+      const mdForType = manuallyDownloaded.filter(x => x.type === type);
+      const mdTitles  = new Set(mdForType.map(x => x.title));
+
+      const adjDownloaded = [...(s.downloaded || []), ...mdForType.map(x => x.title)];
+      const adjMissing    = (s.missing || []).filter(i => !mdTitles.has(i));
+
       // Stat cards
       const cards = document.createElement('div');
       cards.className = 'cards';
       cards.innerHTML = `
         <div class="card"><div class="card-label">Checked</div><div class="card-value">${s.total || '—'}</div></div>
-        <div class="card"><div class="card-label">Downloaded</div><div class="card-value g">${(s.downloaded||[]).length}</div></div>
-        <div class="card"><div class="card-label">Still Missing</div><div class="card-value r">${(s.missing||[]).length}</div></div>
+        <div class="card"><div class="card-label">Downloaded</div><div class="card-value g">${adjDownloaded.length}</div></div>
+        <div class="card"><div class="card-label">Still Missing</div><div class="card-value r">${adjMissing.length}</div></div>
         <div class="card"><div class="card-label">Skipped</div><div class="card-value b">${(s.skipped||[]).length}</div></div>
         <div class="card"><div class="card-label">Runtime</div><div class="card-value" style="font-size:17px;padding-top:3px">${s.runtime||'—'}</div></div>
       `;
@@ -321,7 +337,14 @@ async function loadLatestStats() {
         {key:'skipped',    label:'Skipped',       cls:'pill-b'},
       ];
       for (const sec of detailSections) {
-        const items   = (s[sec.key] || []).filter(i => !manuallyDownloaded.has(i));
+        let items;
+        if (sec.key === 'downloaded') {
+          items = adjDownloaded;            // log downloads + manual downloads
+        } else if (sec.key === 'missing') {
+          items = adjMissing;               // log missing minus manual downloads
+        } else {
+          items = s[sec.key] || [];
+        }
         const reasons = s.reasons  || {};
         if (!items.length) continue;
         const canManualDl = sec.key === 'missing' || sec.key === 'errors';
@@ -338,7 +361,7 @@ async function loadLatestStats() {
               `<div class="acc-item-row">${esc(i)}${ytBtn}</div>` +
               `${r ? `<span class="acc-reason">${esc(r)}</span>` : ''}` +
               (canManualDl ? `<div class="yt-form">` +
-                `<input class="yt-input" placeholder="https://youtube.com/watch?v=…" type="url">` +
+                `<input class="yt-input" placeholder="https://youtube.com/… or other video URL" type="url">` +
                 `<button class="btn btn-primary btn-sm" onclick="submitYtDownload(this)">Download</button>` +
                 `<span class="yt-status"></span>` +
               `</div>` : '') +
@@ -399,7 +422,7 @@ document.getElementById('btnRun').addEventListener('click', async () => {
     const res = await fetch('/api/trigger', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({type: selectedType}),
+      body: JSON.stringify({type: selectedType, full_scan: fullScan}),
     });
     const d = await res.json();
     if (d.error) { toast(d.error, 'err'); return; }
@@ -547,22 +570,13 @@ async function submitYtDownload(btn) {
       btn.disabled = false;
     } else {
       toast('Trailer downloaded for ' + title, 'ok');
-      manuallyDownloaded.add(titleFull);
-      localStorage.setItem('mtdp_downloaded', JSON.stringify([...manuallyDownloaded]));
-      // Re-query by title in case the DOM was re-rendered during the download
-      document.querySelectorAll(`.acc-item[data-title="${escAttr(titleFull)}"]`).forEach(el => {
-        const grid    = el.closest('.acc-grid');
-        const details = el.closest('details');
-        const pill    = details ? details.querySelector('summary .pill') : null;
-        el.style.transition = 'opacity .3s';
-        el.style.opacity = '0';
-        setTimeout(() => {
-          el.remove();
-          const remaining = grid ? grid.querySelectorAll('.acc-item').length : 0;
-          if (pill) pill.textContent = remaining;
-          if (remaining === 0 && details) details.remove();
-        }, 350);
-      });
+      // Only add if not already tracked
+      if (!manuallyDownloaded.some(x => x.title === titleFull && x.type === mediaType)) {
+        manuallyDownloaded.push({title: titleFull, type: mediaType});
+        localStorage.setItem('mtdp_downloaded', JSON.stringify(manuallyDownloaded));
+      }
+      // Re-render stats — cards and accordions now reflect the manual download
+      loadLatestStats();
     }
   } catch (_) {
     status.textContent = '✗ Request failed';

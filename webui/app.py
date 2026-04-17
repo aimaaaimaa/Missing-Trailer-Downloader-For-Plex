@@ -337,8 +337,9 @@ def api_log_stream():
 
 @app.route('/api/trigger', methods=['POST'])
 def api_trigger():
-    data     = request.json or {}
-    run_type = str(data.get('type', '3'))
+    data      = request.json or {}
+    run_type  = str(data.get('type', '3'))
+    full_scan = bool(data.get('full_scan', False))
     if run_type not in ('1', '2', '3'):
         return jsonify({'error': 'Invalid type'}), 400
 
@@ -360,11 +361,31 @@ def api_trigger():
         env['IS_DOCKER']        = 'true'
         env['PYTHONUNBUFFERED'] = '1'
 
+        label = type_labels[run_type]
+        if full_scan:
+            label += ' — Full Scan'
+
         with _lock:
             _state['active']       = True
-            _state['type']         = type_labels[run_type]
+            _state['type']         = label
             _state['started_at']   = datetime.now().isoformat()
             _state['trigger_time'] = trigger_time
+
+        # Full scan: temporarily override USE_LABELS=false in config so all
+        # movies are checked regardless of MTDfP label state.
+        original_config = None
+        if full_scan:
+            try:
+                with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+                    original_config = f.read()
+                cfg = yaml.safe_load(original_config) or {}
+                cfg['USE_LABELS'] = False
+                with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+                print('Full scan: USE_LABELS temporarily set to false', flush=True)
+            except Exception as e:
+                print(f'Full scan config override failed: {e}', flush=True)
+                original_config = None  # don't try to restore if we never wrote
 
         try:
             for script in scripts:
@@ -382,6 +403,13 @@ def api_trigger():
         except Exception as e:
             print(f'Run error: {e}', flush=True)
         finally:
+            if original_config is not None:
+                try:
+                    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                        f.write(original_config)
+                    print('Full scan: config restored', flush=True)
+                except Exception as e:
+                    print(f'Failed to restore config after full scan: {e}', flush=True)
             with _lock:
                 _state['active']  = False
                 _state['process'] = None
@@ -438,8 +466,8 @@ def api_manual_download():
 
     if not title or not url:
         return jsonify({'error': 'title and url are required'}), 400
-    if 'youtube.com' not in url and 'youtu.be' not in url:
-        return jsonify({'error': 'Only YouTube URLs are supported'}), 400
+    if not url.startswith('http://') and not url.startswith('https://'):
+        return jsonify({'error': 'URL must start with http:// or https://'}), 400
     if media_type not in ('Movies', 'TV Shows'):
         return jsonify({'error': 'Invalid media_type'}), 400
 
@@ -452,7 +480,10 @@ def api_manual_download():
     # Find the media folder — exact match first, then fuzzy
     # Normalise colons to dashes for filesystem comparison (Plex: "A: B" → disk: "A - B")
     def norm(s):
-        return re.sub(r'\s*:\s*', ' - ', s).lower()
+        s = re.sub(r'\s*[:\-]\s*', ' ', s)  # colon or dash → space
+        s = re.sub(r"['\u2019]", '', s)      # strip apostrophes
+        s = re.sub(r'\s+', ' ', s)           # collapse multiple spaces
+        return s.lower().strip()
 
     search_name  = f"{title} ({year})" if year else title
     norm_title   = norm(title)
@@ -491,14 +522,16 @@ def api_manual_download():
     out_tmpl  = os.path.join(trailers_folder, out_name + '.%(ext)s')
 
     cookies_path = get_cookies_path()
+    is_youtube = 'youtube.com' in url or 'youtu.be' in url
     ydl_opts = {
-        'outtmpl':        out_tmpl,
-        'quiet':          True,
-        'no_warnings':    True,
-        'noplaylist':     True,
-        'format':         'bestvideo+bestaudio/best',
-        'extractor_args': {'youtube': {'player_client': ['android']}},
+        'outtmpl':    out_tmpl,
+        'quiet':      True,
+        'no_warnings': True,
+        'noplaylist': True,
+        'format':     'bestvideo+bestaudio/best',
     }
+    if is_youtube:
+        ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
     if cookies_path:
         ydl_opts['cookiefile'] = cookies_path
 

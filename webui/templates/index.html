@@ -111,6 +111,7 @@ select.log-sel:focus{border-color:#e5a00d}
 .acc-item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
 .yt-btn{background:transparent;border:1px solid #2a2a3a;color:#444;border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;flex-shrink:0;transition:all .15s;line-height:1.4}
 .yt-btn:hover{border-color:#e74c3c;color:#e74c3c}
+.yt-search-btn:hover{border-color:#3498db !important;color:#3498db !important}
 .yt-form{display:none;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
 .yt-form.open{display:flex}
 .yt-input{background:#08080e;border:1px solid #333;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;flex:1;min-width:180px;outline:none}
@@ -374,8 +375,11 @@ async function loadLatestStats() {
             const ytBtn = canManualDl
               ? `<button class="yt-btn" title="Supply a YouTube URL to download this trailer" onclick="toggleYtForm(this)">▼ YT</button>`
               : '';
+            const searchBtn = canManualDl
+              ? `<button class="yt-btn yt-search-btn" title="Search YouTube for this trailer" onclick="searchYt(${JSON.stringify(i)})">S</button>`
+              : '';
             return `<div class="acc-item" data-title="${escAttr(i)}" data-mtype="${escAttr(type)}">` +
-              `<div class="acc-item-row">${esc(i)}${ytBtn}</div>` +
+              `<div class="acc-item-row">${esc(i)}<span style="display:flex;gap:4px;flex-shrink:0">${searchBtn}${ytBtn}</span></div>` +
               `${r ? `<span class="acc-reason">${esc(r)}</span>` : ''}` +
               (canManualDl ? `<div class="yt-form">` +
                 `<input class="yt-input" placeholder="https://youtube.com/… or other video URL" type="url">` +
@@ -551,6 +555,11 @@ async function saveConfig() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // ── Manual YouTube download ───────────────────────────────────────────────────
+function searchYt(titleFull) {
+  const query = titleFull.replace(/\((\d{4})\)/, '$1').trim() + ' trailer';
+  window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query).replace(/%20/g, '+'), '_blank');
+}
+
 function toggleYtForm(btn) {
   const form = btn.closest('.acc-item').querySelector('.yt-form');
   form.classList.toggle('open');

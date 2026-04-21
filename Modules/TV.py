@@ -150,7 +150,8 @@ cookies_path = get_cookies_path()
 if cookies_path:
     print(f"{GREEN}Found cookies file: {cookies_path}{RESET}")
 
-# Connect to Plex
+import plexapi
+plexapi.BASE_HEADERS['X-Plex-Client-Identifier'] = 'mtdp-trailer-downloader'
 plex = PlexServer(PLEX_URL, PLEX_TOKEN)
 
 # Print configuration

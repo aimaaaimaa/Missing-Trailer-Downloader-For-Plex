@@ -52,8 +52,31 @@ ssh fastchar@10.10.0.10 "sudo docker exec mtdp-webui grep -n 'your search string
 
 ---
 
+## Configuration
+
+Config lives at `/opt/docker_data/mtdp/config/config.yml` (volume-mounted — changes take effect on next run, no restart needed).
+
+Key settings:
+- `USE_LABELS: true` — skip movies already labelled `MTDfP` in Plex
+- `REFRESH_METADATA: true` — trigger a Plex metadata refresh after each trailer download so Plex picks up the new file immediately
+- `CHECK_PLEX_PASS_TRAILERS: true` — skip movies that already have a Plex Pass trailer
+
+---
+
+## MTDfP Label behaviour
+
+The `MTDfP` label is applied to Plex items after a trailer is downloaded, so MTDP skips them on future runs.
+
+- **Labels survive metadata refresh** — Plex preserves user-set labels and collections through metadata refreshes (they are not sourced from external agents). `REFRESH_METADATA: true` is safe to use.
+- **Web UI manual downloads** apply the label automatically via the Plex API after the download completes.
+- **MTDP script downloads** apply the label via `plexapi` after each successful download.
+- The fixed Plex client identifier `mtdp-trailer-downloader` is used for all Plex API calls (both script and web UI) so Plex does not register a new device on each run.
+
+---
+
 ## Notes
 
 - `fastchar` has passwordless sudo on dockhost
 - The web UI runs on port `7879` → `http://10.10.0.10:7879`
 - The docker-compose stack includes: radarr, sonarr, bazarr, prowlarr, qbittorrent, jellyfin, lidarr, readarr, whisparr, flaresolverr, ntfy, mtdp, mtdp-webui
+- Plex runs separately on `10.10.0.200` (the NAS) — not on dockhost

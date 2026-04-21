@@ -486,7 +486,7 @@ def _get_plex_section_id(plex_url, token, media_type):
     try:
         req = urllib.request.Request(
             f"{plex_url}/library/sections?X-Plex-Token={token}",
-            headers={'Accept': 'application/json'}
+            headers={'Accept': 'application/json', 'X-Plex-Client-Identifier': 'mtdp-trailer-downloader'}
         )
         with urllib.request.urlopen(req, timeout=5) as r:
             data = _json.load(r)
@@ -508,7 +508,7 @@ def _find_folder_via_plex(title, year, media_type):
         params = urllib.parse.urlencode({'query': title, 'X-Plex-Token': token})
         req = urllib.request.Request(
             f"{plex_url}/search?{params}",
-            headers={'Accept': 'application/json'}
+            headers={'Accept': 'application/json', 'X-Plex-Client-Identifier': 'mtdp-trailer-downloader'}
         )
         with urllib.request.urlopen(req, timeout=5) as r:
             data = _json.load(r)
@@ -555,6 +555,47 @@ def find_media_folder(title, year, media_type):
 
 
 
+def _apply_mtdfp_label(title, year, media_type):
+    """Find the Plex item and apply the MTDfP label so MTDP skips it on future runs."""
+    plex_url, token = _get_plex_config()
+    if not plex_url or not token:
+        print(f'[label] skipping — no Plex config')
+        return
+    try:
+        params = urllib.parse.urlencode({'query': title, 'X-Plex-Token': token})
+        req = urllib.request.Request(
+            f"{plex_url}/search?{params}",
+            headers={'Accept': 'application/json', 'X-Plex-Client-Identifier': 'mtdp-trailer-downloader'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = _json.load(r)
+        items = data.get('MediaContainer', {}).get('Metadata', [])
+        plex_type = 'movie' if media_type == 'Movies' else 'show'
+        for item in items:
+            if item.get('type') != plex_type:
+                continue
+            if year and str(item.get('year', '')) != str(year):
+                continue
+            rating_key = item.get('ratingKey')
+            if not rating_key:
+                continue
+            label_params = urllib.parse.urlencode({
+                'label[].tag.tag': 'MTDfP',
+                'X-Plex-Token': token
+            })
+            label_req = urllib.request.Request(
+                f"{plex_url}/library/metadata/{rating_key}?{label_params}",
+                headers={'X-Plex-Client-Identifier': 'mtdp-trailer-downloader'},
+                method='PUT'
+            )
+            urllib.request.urlopen(label_req, timeout=5).close()
+            print(f'[label] applied MTDfP to "{title}" (ratingKey={rating_key})')
+            return
+        print(f'[label] no Plex match found for "{title}" ({year})')
+    except Exception as e:
+        print(f'[label] error applying MTDfP to "{title}": {e}')
+
+
 @app.route('/api/download/manual', methods=['POST'])
 def api_manual_download():
     data       = request.json or {}
@@ -598,6 +639,7 @@ def api_manual_download():
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
+        _apply_mtdfp_label(title, year, media_type)
         return jsonify({'status': 'downloaded', 'folder': media_folder})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

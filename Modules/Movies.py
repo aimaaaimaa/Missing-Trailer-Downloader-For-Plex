@@ -168,7 +168,8 @@ if YT_DLP_CUSTOM_OPTIONS:
 if IS_DOCKER:
     print(f"Running in: {GREEN}Docker Container{RESET}")
 
-# Connect to Plex
+import plexapi
+plexapi.BASE_HEADERS['X-Plex-Client-Identifier'] = 'mtdp-trailer-downloader'
 plex = PlexServer(PLEX_URL, PLEX_TOKEN)
 
 # Lists to store movie trailer status

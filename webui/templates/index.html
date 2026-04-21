@@ -80,7 +80,7 @@ details.acc[open] summary{color:#fff;background:#1a1a28;border-bottom:1px solid 
 /* ── Log box ── */
 .log-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
 .log-toolbar-left{font-size:11px;color:#444}
-.log-box{background:#08080e;border:1px solid #252535;border-radius:8px;padding:10px 14px;overflow-y:auto;font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:11.5px;line-height:1.65;color:#bbb}
+.log-box{background:#08080e;border:1px solid #252535;border-radius:8px;padding:10px 14px;overflow-y:auto;overflow-anchor:none;font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:11.5px;line-height:1.65;color:#bbb}
 .log-line{white-space:pre-wrap;word-break:break-all}
 .log-line.ls{color:#2ecc71}.log-line.le{color:#e74c3c}.log-line.lw{color:#f39c12}.log-line.li{color:#3498db}
 .autoscroll-label{font-size:11px;color:#555;display:flex;align-items:center;gap:5px;cursor:pointer}
@@ -108,10 +108,8 @@ select.log-sel:focus{border-color:#e5a00d}
 @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 
 /* ── Manual download ── */
-.acc-item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
-.yt-btn{background:transparent;border:1px solid #2a2a3a;color:#444;border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer;flex-shrink:0;transition:all .15s;line-height:1.4}
-.yt-btn:hover{border-color:#e74c3c;color:#e74c3c}
-.yt-search-btn:hover{border-color:#3498db !important;color:#3498db !important}
+.acc-item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;cursor:pointer;user-select:none}
+.acc-item-row:hover{color:#e5a00d}
 .yt-form{display:none;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
 .yt-form.open{display:flex}
 .yt-input{background:#08080e;border:1px solid #333;color:#ccc;padding:4px 8px;border-radius:4px;font-size:11px;flex:1;min-width:180px;outline:none}
@@ -225,6 +223,8 @@ manuallyDownloaded = manuallyDownloaded.filter(x => x && typeof x === 'object' &
 
 // Tracks which accordions are open across re-renders. Key: "{type}:{label}"
 const openSections = new Set();
+// Tracks which Fix URL forms are open across re-renders. Key: "{type}:{title}"
+const openForms = new Set();
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-tab').forEach(t => {
@@ -290,10 +290,18 @@ async function loadLatestStats() {
     const data = await (await fetch('/api/runs/latest')).json();
     if (!data) return;
 
-    // Snapshot which accordions are currently open before re-rendering
+    // Snapshot which accordions and URL forms are currently open before re-rendering
     document.querySelectorAll('details.acc[data-acc-key]').forEach(det => {
       if (det.open) openSections.add(det.dataset.accKey);
       else openSections.delete(det.dataset.accKey);
+    });
+    document.querySelectorAll('.acc-item .yt-form.open').forEach(form => {
+      const item = form.closest('.acc-item');
+      if (item) openForms.add(`${item.dataset.mtype}:${item.dataset.title}`);
+    });
+    document.querySelectorAll('.acc-item .yt-form:not(.open)').forEach(form => {
+      const item = form.closest('.acc-item');
+      if (item) openForms.delete(`${item.dataset.mtype}:${item.dataset.title}`);
     });
 
     const wrap = document.getElementById('statsWrap');
@@ -372,18 +380,14 @@ async function loadLatestStats() {
           `<summary><span class="pill ${sec.cls}">${items.length}</span> ${sec.label}</summary>` +
           `<div class="acc-grid">${items.map(i => {
             const r = reasons[i];
-            const ytBtn = canManualDl
-              ? `<button class="yt-btn" title="Supply a YouTube URL to download this trailer" onclick="toggleYtForm(this)">▼ YT</button>`
-              : '';
-            const searchBtn = canManualDl
-              ? `<button class="yt-btn yt-search-btn" title="Search YouTube for this trailer" onclick="searchYt(${escAttr(JSON.stringify(i))})">S</button>`
-              : '';
+            const formOpen = openForms.has(`${type}:${i}`);
+            const rowClick = canManualDl ? `onclick="fixTrailer(this,${escAttr(JSON.stringify(i))})"` : '';
             return `<div class="acc-item" data-title="${escAttr(i)}" data-mtype="${escAttr(type)}">` +
-              `<div class="acc-item-row">${esc(i)}<span style="display:flex;gap:4px;flex-shrink:0">${searchBtn}${ytBtn}</span></div>` +
+              `<div class="acc-item-row" ${rowClick}>${esc(i)}</div>` +
               `${r ? `<span class="acc-reason">${esc(r)}</span>` : ''}` +
-              (canManualDl ? `<div class="yt-form">` +
-                `<input class="yt-input" placeholder="https://youtube.com/… or other video URL" type="url">` +
-                `<button class="btn btn-primary btn-sm" onclick="submitYtDownload(this)">Download</button>` +
+              (canManualDl ? `<div class="yt-form${formOpen ? ' open' : ''}">` +
+                `<input class="yt-input" placeholder="https://youtube.com/… or other video URL" type="url" onclick="event.stopPropagation()">` +
+                `<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();submitYtDownload(this)">Download</button>` +
                 `<span class="yt-status"></span>` +
               `</div>` : '') +
             `</div>`;
@@ -418,14 +422,47 @@ function startLiveLog(since) {
   evtSrc.onerror = () => { if (evtSrc) { evtSrc.close(); evtSrc = null; } };
 }
 
+const _logBuffer = {};
+
+function _initScrollPin(boxId, chkId) {
+  const box = document.getElementById(boxId);
+  if (!box || box._scrollPinInit) return;
+  box._scrollPinInit = true;
+  const chk = document.getElementById(chkId);
+  if (chk) {
+    chk.addEventListener('change', () => {
+      if (chk.checked) _flushLogBuffer(box, chkId);
+    });
+  }
+}
+
+function _flushLogBuffer(box, chkId) {
+  const buf = _logBuffer[box.id];
+  if (!buf || !buf.length) return;
+  buf.forEach(text => {
+    const div = document.createElement('div');
+    div.className = 'log-line ' + lineClass(text);
+    div.textContent = text;
+    box.appendChild(div);
+    while (box.children.length > 600) box.removeChild(box.firstChild);
+  });
+  _logBuffer[box.id] = [];
+  box.scrollTop = box.scrollHeight;
+}
+
 function appendLine(box, text, chkId) {
+  const chk = document.getElementById(chkId);
+  if (chk && !chk.checked) {
+    if (!_logBuffer[box.id]) _logBuffer[box.id] = [];
+    _logBuffer[box.id].push(text);
+    return;
+  }
   const div = document.createElement('div');
   div.className = 'log-line ' + lineClass(text);
   div.textContent = text;
   box.appendChild(div);
   while (box.children.length > 600) box.removeChild(box.firstChild);
-  const chk = document.getElementById(chkId);
-  if (chk && chk.checked) box.scrollTop = box.scrollHeight;
+  box.scrollTop = box.scrollHeight;
 }
 
 function lineClass(t) {
@@ -555,15 +592,20 @@ async function saveConfig() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // ── Manual YouTube download ───────────────────────────────────────────────────
-function searchYt(titleFull) {
-  const query = titleFull.replace(/\((\d{4})\)/, '$1').trim() + ' trailer';
-  window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query).replace(/%20/g, '+'), '_blank');
-}
-
-function toggleYtForm(btn) {
-  const form = btn.closest('.acc-item').querySelector('.yt-form');
+function fixTrailer(row, titleFull) {
+  const item = row.closest('.acc-item');
+  const form = item.querySelector('.yt-form');
+  const opening = !form.classList.contains('open');
   form.classList.toggle('open');
-  if (form.classList.contains('open')) form.querySelector('.yt-input').focus();
+  const formKey = `${item.dataset.mtype}:${item.dataset.title}`;
+  if (opening) {
+    openForms.add(formKey);
+    const query = titleFull.replace(/\((\d{4})\)/, '$1').trim() + ' trailer';
+    window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(query).replace(/%20/g, '+'), '_blank');
+    form.querySelector('.yt-input').focus();
+  } else {
+    openForms.delete(formKey);
+  }
 }
 
 async function submitYtDownload(btn) {
@@ -634,6 +676,8 @@ function toast(msg, type) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (async function init() {
+  _initScrollPin('dashLog', 'chkScroll');
+  _initScrollPin('logViewer', 'chkLogScroll');
   await pollStatus();
   await loadLatestStats();
   startLiveLog(0);

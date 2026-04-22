@@ -629,10 +629,13 @@ def api_manual_download():
         'quiet':      True,
         'no_warnings': True,
         'noplaylist': True,
-        'format':     'bestvideo+bestaudio/best',
+        'format':     'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
+        'merge_output_format': 'mp4',
     }
     if is_youtube:
-        ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
+        client = 'web' if cookies_path else 'android'
+        ydl_opts['extractor_args'] = {'youtube': {'player_client': [client]}}
+        ydl_opts['js_runtimes'] = {'node': {}}
     if cookies_path:
         ydl_opts['cookiefile'] = cookies_path
 
